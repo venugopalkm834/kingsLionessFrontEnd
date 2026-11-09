@@ -1,11 +1,11 @@
 {
   "/api": {
-    "target": "https://kingslionessbackend.onrender.com",
+    "target": "https://kingslionessbackend.onrender.com/api",
     "secure": true,
     "changeOrigin": true
   },
   "/uploads": {
-    "target": "https://kingslionessbackend.onrender.com",
+    "target": "https://kingslionessbackend.onrender.com/api",
     "secure": true,
     "changeOrigin": true
   }
