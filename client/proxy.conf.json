@@ -1,0 +1,12 @@
+{
+  "/api": {
+    "target": "https://kingslionessbackend.onrender.com",
+    "secure": true,
+    "changeOrigin": true
+  },
+  "/uploads": {
+    "target": "https://kingslionessbackend.onrender.com",
+    "secure": true,
+    "changeOrigin": true
+  }
+}
