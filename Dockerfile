@@ -1,19 +1,16 @@
-
 FROM node:22-alpine AS build
 
 WORKDIR /app
 
 COPY client/package*.json ./
-
 RUN npm install
 
 COPY client/ ./
-
 RUN npm run build
 
 FROM nginx:alpine
 
-COPY --from=build /app/dist/ /usr/share/nginx/html/
+COPY --from=build /app/dist/your-project-name/browser/ /usr/share/nginx/html/
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
