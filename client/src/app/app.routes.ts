@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { userGuard, adminGuard } from './core/core';
 const a = () => import('./features/admin/pages');
 const b = () => import('./features/admin/pages2');
+const c = () => import('./features/admin/content');
 export const routes: Routes = [
   { path: 'admin/login', loadComponent: () => import('./features/user/auth').then((m) => m.AuthPage), data: { admin: true } },
   { path: 'admin', canActivate: [adminGuard], loadComponent: () => import('./features/admin/shell').then((m) => m.AdminShell), children: [
@@ -14,6 +15,8 @@ export const routes: Routes = [
     { path: 'settings', loadComponent: () => b().then((m) => m.AdminSettingsPage) },
     { path: 'returns', loadComponent: () => b().then((m) => m.AdminReturnsPage) },
     { path: 'reports', loadComponent: () => b().then((m) => m.AdminReportsPage) },
+    { path: 'payment-accounts', loadComponent: () => c().then((m) => m.AdminPaymentAccountsPage) },
+    { path: 'banners', loadComponent: () => c().then((m) => m.AdminBannersPage) },
     { path: ':kind', loadComponent: () => b().then((m) => m.AdminListPage) },
   ] },
   { path: '', loadComponent: () => import('./features/user/shell').then((m) => m.UserShell), children: [
