@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Api, Auth, Site, ToastService, fileUrl } from '../../core/core';
@@ -16,6 +16,19 @@ const DEFAULT_SERVICES = [
 ].map((d) => ({ ...d, image: `assets/services/${d.slug}.svg`, fallback: true }));
 
 @Component({ standalone: true, imports: COMMON, template: `
+  @if (banners().length) {
+    <section class="banners" aria-label="Offers and announcements"><div class="container"><div class="bwrap">
+      @for (b of banners(); track b._id; let i = $index) {
+        <div class="slide" [class.on]="i === bi()" [attr.aria-hidden]="i !== bi()">
+          @if (b.link) { <a [href]="b.link" target="_blank" rel="noopener"><img [src]="file(b.image)" [alt]="b.title || 'Banner'" [attr.loading]="i ? 'lazy' : 'eager'"></a> } @else { <img [src]="file(b.image)" [alt]="b.title || 'Banner'" [attr.loading]="i ? 'lazy' : 'eager'"> }
+          @if (b.title || b.subtitle) { <div class="cap"><b>{{b.title}}</b><span>{{b.subtitle}}</span></div> }
+        </div> }
+      @if (banners().length > 1) {
+        <button type="button" class="bnav prev" (click)="step(-1)" aria-label="Previous banner"><lucide-icon name="chevron-left" [size]="20"/></button>
+        <button type="button" class="bnav next" (click)="step(1)" aria-label="Next banner"><lucide-icon name="chevron-right" [size]="20"/></button>
+        <div class="dots">@for (b of banners(); track b._id; let i = $index) { <button type="button" [class.on]="i === bi()" (click)="goto(i)" [attr.aria-label]="'Banner ' + (i + 1)"></button> }</div> }
+    </div></div></section> }
+
   <section class="hero"><div class="container hgrid">
     <div class="hcopy">
       <h1>Everything you need, <em>all in one place.</em></h1>
@@ -79,6 +92,12 @@ const DEFAULT_SERVICES = [
       </form> }
   </app-modal>`,
   styles: [`
+  .banners{background:var(--ink);padding:14px 0;border-bottom:3px solid var(--gold)}.bwrap{position:relative;border-radius:20px;overflow:hidden;aspect-ratio:16/6;background:#111}
+  .slide{position:absolute;inset:0;opacity:0;transition:opacity .6s var(--ease);pointer-events:none}.slide.on{opacity:1;pointer-events:auto}.slide a,.slide img{display:block;width:100%;height:100%}.slide img{object-fit:cover}
+  .cap{position:absolute;left:0;right:0;bottom:0;padding:34px 22px 16px;background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;display:grid;gap:2px}.cap b{font:800 clamp(1.05rem,2.6vw,1.8rem) var(--display)}.cap span{font-size:clamp(.82rem,1.6vw,1rem);color:#EDE9DD}
+  .bnav{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;display:grid;place-items:center;cursor:pointer;z-index:3}.bnav:hover{background:var(--gold);color:#1A1405}.prev{left:10px}.next{right:10px}
+  .dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:7px;z-index:3}.dots button{width:9px;height:9px;border-radius:50%;border:0;background:rgba(255,255,255,.5);cursor:pointer;padding:0}.dots button.on{background:var(--gold);width:22px;border-radius:6px}
+  @media(max-width:640px){.bwrap{aspect-ratio:16/9;border-radius:14px}.banners{padding:10px 0}.cap{padding:24px 14px 26px}}
   .hero{background:radial-gradient(900px 420px at 90% -10%,#F2E3B5 0,transparent 60%),#fff;border-bottom:1px solid var(--border);overflow:hidden}
   .hgrid{display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center;padding-block:64px 80px}.hcopy{display:grid;gap:26px;justify-items:start;min-width:0}
   .hcopy h1 em{font-style:normal;background:linear-gradient(transparent 62%,var(--gold-100) 62%);padding-inline:2px}.lead{color:var(--muted);font-size:1.15rem;max-width:48ch}
@@ -108,13 +127,19 @@ const DEFAULT_SERVICES = [
   @media(max-width:1000px){.svcs{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}}
   @media(max-width:900px){.hgrid{grid-template-columns:1fr;padding-block:34px 56px;gap:30px}.collage{min-height:330px}.stamp{width:84px;height:84px}.sec{padding:52px 0}}
   @media(max-width:640px){.hero h1{font-size:clamp(2.2rem,10.5vw,3rem)}.facts{gap:22px}.collage{min-height:290px}.svcs{grid-template-columns:1fr;gap:18px}.in{padding:18px}}`] })
-export class HomePage implements OnInit {
+export class HomePage implements OnInit, OnDestroy {
   api = inject(Api); auth = inject(Auth); router = inject(Router); toast = inject(ToastService); fb = inject(FormBuilder); site = inject(Site);
   tags = TAGS; services = signal<any[]>(DEFAULT_SERVICES); loading = signal(true); detail = signal<any>(null); sel = signal<any>(null); done = signal<any>(null); busy = signal(false);
   audio: File | null = null; today = new Date().toISOString().slice(0, 10);
   bf = this.fb.nonNullable.group({ mobile: ['', [Validators.required, Validators.pattern(/^[6-9]\d{9}$/)]], serviceName: ['', [Validators.required, Validators.minLength(2)]], description: [''], quantity: [1, [Validators.required, Validators.min(1)]],
     address: ['', [Validators.required, Validators.minLength(5)]], preferredDate: ['', Validators.required], additional: [''] });
+  banners = signal<any[]>([]); bi = signal(0); file = fileUrl; private bt: any;
+  step(d: number) { const n = this.banners().length; if (n) this.bi.set((this.bi() + d + n) % n); this.restart(); }
+  goto(i: number) { this.bi.set(i); this.restart(); }
+  private restart() { clearInterval(this.bt); if (this.banners().length > 1) this.bt = setInterval(() => this.bi.set((this.bi() + 1) % this.banners().length), 5000); }
+  ngOnDestroy() { clearInterval(this.bt); }
   ngOnInit() {
+    this.api.get<any[]>('/banners').subscribe({ next: (b) => { this.banners.set(b); this.restart(); }, error: () => {} });
     this.api.get<any[]>('/services').subscribe({ next: (s) => { if (s.length) this.services.set(s); this.loading.set(false); }, error: () => this.loading.set(false) });
   }
   img(s: any) { return fileUrl(s.image) || `assets/services/${s.slug}.svg`; }

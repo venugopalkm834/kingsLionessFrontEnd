@@ -4,7 +4,8 @@ import { Router, CanActivateFn } from '@angular/router';
 import { tap, catchError, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 
-export interface Me { id: string; userId: string; name: string; username: string; email: string; mobile: string; role: 'user' | 'admin'; referralCode: string;
+export interface Nominee { name: string; relation: string; mobile?: string; dob?: string; address?: string; }
+export interface Me { id: string; userId: string; name: string; username: string; email?: string; mobile: string; role: 'user' | 'admin'; referralCode: string; nominee?: Nominee;
   avatar?: string; address?: string; city?: string; state?: string; pin?: string; status: string; createdAt: string; }
 
 @Injectable({ providedIn: 'root' })
@@ -30,6 +31,7 @@ export class Auth {
   isAdmin = computed(() => this.me()?.role === 'admin');
   get token() { return read('kl_token'); }
   private save = (r: { token: string; user: Me }) => { write('kl_token', r.token); write('kl_user', JSON.stringify(r.user)); this.me.set(r.user); };
+  /** Customers sign in with mobile number OR username; the admin console uses email or username. */
   login(identifier: string, password: string, admin = false) { return this.api.post<{ token: string; user: Me }>(admin ? '/auth/admin/login' : '/auth/login', { identifier, password }).pipe(tap(this.save)); }
   register(b: any) { return this.api.post<{ token: string; user: Me }>('/auth/register', b).pipe(tap(this.save)); }
   refresh() { return this.api.get<Me>('/auth/me').pipe(tap((u) => { write('kl_user', JSON.stringify(u)); this.me.set(u); })); }
