@@ -1,4 +1,5 @@
 import { Component, Injectable, Input, Output, EventEmitter, HostListener, OnDestroy, inject, signal } from '@angular/core';
+import { ReactiveFormsModule, FormControl } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
 import { ToastService } from '../core/core';
 
@@ -106,3 +107,13 @@ export class VoiceComponent implements OnDestroy {
   fmt(s: number) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
   ngOnDestroy() { clearInterval(this.timer); this.release(); if (this.url()) URL.revokeObjectURL(this.url()); }
 }
+
+// Password input with an eye button to show / hide what is typed.
+@Component({ selector: 'app-password', standalone: true, imports: [ReactiveFormsModule, LucideAngularModule], template: `
+  <div class="pw"><input [id]="inputId" [type]="shown() ? 'text' : 'password'" [formControl]="control" [attr.autocomplete]="autocomplete" autocapitalize="none" spellcheck="false">
+    <button type="button" class="eye" (click)="shown.set(!shown())" [attr.aria-label]="shown() ? 'Hide password' : 'Show password'" [attr.aria-pressed]="shown()">
+      <lucide-icon [name]="shown() ? 'eye-off' : 'eye'" [size]="18"/></button></div>`,
+  styles: [`.pw{position:relative}.pw input{width:100%;padding-right:48px}
+  .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;background:none;color:var(--muted);cursor:pointer;display:grid;place-items:center;border-radius:10px}
+  .eye:hover,.eye:focus-visible{color:var(--ink);background:var(--bg)}`] })
+export class PasswordFieldComponent { @Input({ required: true }) control!: FormControl<any>; @Input() inputId = ''; @Input() autocomplete = 'current-password'; shown = signal(false); }

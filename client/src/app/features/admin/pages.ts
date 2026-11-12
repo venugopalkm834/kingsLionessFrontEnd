@@ -153,7 +153,7 @@ export class AdminBookingsPage implements OnInit {
       <div class="field"><label>Set new password (optional)</label><input type="text" [(ngModel)]="e.newPassword" placeholder="leave empty to keep" autocomplete="off"></div></div>
     <button type="button" class="btn btn-primary btn-block" [disabled]="saving()" (click)="saveEdit()">{{saving() ? 'Saving…' : 'Save changes'}}</button> }</app-modal>
   <app-modal [open]="!!det()" [drawer]="true" [title]="det()?.user?.name || 'User'" (close)="det.set(null)">@if (det(); as d) {
-    <dl class="dl mb"><dt>User ID</dt><dd>{{d.user.userId}}</dd><dt>Email</dt><dd>{{d.user.email}}</dd><dt>Mobile</dt><dd>{{d.user.mobile}}</dd><dt>Joined</dt><dd>{{d.user.createdAt | date:'mediumDate'}}</dd>
+    <dl class="dl mb"><dt>User ID</dt><dd>{{d.user.userId}}</dd><dt>Email</dt><dd>{{d.user.email || '—'}}</dd><dt>Mobile</dt><dd>{{d.user.mobile}}</dd><dt>Joined</dt><dd>{{d.user.createdAt | date:'mediumDate'}}</dd><dt>Nominee</dt><dd>@if (d.user.nominee?.name) { {{d.user.nominee.name}} ({{d.user.nominee.relation}})@if (d.user.nominee.mobile) { · {{d.user.nominee.mobile}} }@if (d.user.nominee.dob) { · DOB {{d.user.nominee.dob}} }@if (d.user.nominee.address) { · {{d.user.nominee.address}} } } @else { — }</dd>
       <dt>Balance</dt><dd>{{inr(d.wallet?.balance)}}</dd><dt>Principal</dt><dd>{{inr(d.wallet?.principal)}}</dd><dt>Earned</dt><dd>{{inr(d.wallet?.earned)}}</dd></dl>
     <h3 class="mb">Recent transactions</h3>@if (!d.transactions.length) { <p class="muted sm">None yet.</p> }
     @for (t of d.transactions; track t._id) { <div class="row between li"><div><b style="text-transform:capitalize">{{t.type.replace('_',' ')}}</b><div class="sm muted">{{t.note}} · {{t.createdAt | date:'d MMM, h:mm a'}}</div></div><b>{{t.direction==='credit'?'+':'−'}}{{inr(t.amount)}}</b></div> }
@@ -223,16 +223,30 @@ export class AdminServicesPage implements OnInit {
     <div class="row wrap"><button type="button" class="btn btn-ok" (click)="adj(null,'credit')"><lucide-icon name="plus" [size]="16"/> Add funds</button><button type="button" class="btn btn-danger" (click)="adj(null,'debit')"><lucide-icon name="minus" [size]="16"/> Deduct funds</button></div></div>
   <div class="card flat mb"><div class="row wrap"><input class="grow" style="min-width:200px" [(ngModel)]="search" (keyup.enter)="load(1)" placeholder="Search user ID, name or mobile…"><button type="button" class="btn btn-primary btn-sm" (click)="load(1)">Search</button></div></div>
   @if (loading()) { <app-skeleton [n]="6"/> } @else if (!items().length) { <div class="card"><app-empty title="No wallets found"/></div> } @else {
-  <div class="tbl-wrap"><table class="stack-m"><thead><tr><th>User</th><th>Balance</th><th>Principal</th><th>Earned</th><th>Total deposits</th><th>Total returns</th><th>Actions</th></tr></thead><tbody>
+  <div class="tbl-wrap"><table class="stack-m"><thead><tr><th>User</th><th>Balance</th><th>Principal</th><th>Earned</th><th>Principal lock</th><th>Total returns</th><th>Actions</th></tr></thead><tbody>
   @for (w of items(); track w._id) { <tr><td data-l="User"><b>{{w.user?.name}}</b><div class="sm muted">{{w.user?.userId}}</div></td><td data-l="Balance"><b>{{inr(w.balance)}}</b></td>
-    <td data-l="Principal">{{inr(w.principal)}}</td><td data-l="Earned">{{inr(w.earned)}}</td><td data-l="Total deposits">{{inr(w.totalDeposits)}}</td><td data-l="Total returns">{{inr(w.totalReturns)}}</td>
-    <td data-l="Actions"><div class="row wrap" style="gap:6px"><button type="button" class="btn btn-ok btn-sm" (click)="adj(w,'credit')">Add</button><button type="button" class="btn btn-ghost btn-sm" (click)="adj(w,'debit')">Deduct</button></div></td></tr> }</tbody></table></div>
+    <td data-l="Principal">{{inr(w.principal)}}</td><td data-l="Earned">{{inr(w.earned)}}</td><td data-l="Principal lock">@if (w.lock?.locked) { <b>Locked</b><div class="sm muted">{{w.lock.unlockAt ? ('until ' + (w.lock.unlockAt | date:'d MMM y')) : 'date not set'}}</div> } @else { <span class="sm muted">{{w.principal > 0 ? 'Unlocked' : '—'}}</span> }</td><td data-l="Total returns">{{inr(w.totalReturns)}}</td>
+    <td data-l="Actions"><div class="row wrap" style="gap:6px"><button type="button" class="btn btn-ok btn-sm" (click)="adj(w,'credit')">Add</button><button type="button" class="btn btn-ghost btn-sm" (click)="adj(w,'debit')">Deduct</button><button type="button" class="btn btn-ghost btn-sm" (click)="openLock(w)">Lock</button></div></td></tr> }</tbody></table></div>
   <app-pager [page]="page()" [limit]="10" [total]="total()" (go)="load($event)"/> }
-  <app-adjust [open]="adjOpen()" [wallet]="adjWallet" [direction]="adjDir" (close)="adjOpen.set(false)" (done)="load(page())"/>`})
+  <app-adjust [open]="adjOpen()" [wallet]="adjWallet" [direction]="adjDir" (close)="adjOpen.set(false)" (done)="load(page())"/>
+  <app-modal [open]="!!lw()" title="Principal lock" (close)="lw.set(null)">@if (lw(); as w) {
+    <p class="muted sm mb">{{w.user?.name}} ({{w.user?.userId}}) · principal {{inr(w.principal)}} · @if (w.lock?.locked) { locked {{w.lock.unlockAt ? ('until ' + (w.lock.unlockAt | date:'d MMM y')) : '(no date set yet)'}} } @else { unlocked }</p>
+    <div class="field"><label>Set lock</label><select [(ngModel)]="lm.mode"><option value="months">Lock for a number of months</option><option value="days">Lock for a number of days</option><option value="date">Lock until a date</option><option value="unlock">Unlock now</option><option value="default">Back to the default rule (Settings)</option></select></div>
+    @if (lm.mode==='months') { <div class="field"><label>Months from today (12 = one year)</label><input type="number" min="1" max="120" [(ngModel)]="lm.months"></div> }
+    @if (lm.mode==='days') { <div class="field"><label>Days from today</label><input type="number" min="0" max="3650" [(ngModel)]="lm.days"></div> }
+    @if (lm.mode==='date') { <div class="field"><label>Unlock date</label><input type="date" [(ngModel)]="lm.date"></div> }
+    <button type="button" class="btn btn-primary btn-block" [disabled]="lbusy()" (click)="saveLock()">{{lbusy() ? 'Saving…' : 'Save lock'}}</button> }</app-modal>`})
 export class AdminWalletsPage implements OnInit {
   api = inject(Api); toast = inject(ToastService); inr = inr;
   items = signal<any[]>([]); total = signal(0); page = signal(1); loading = signal(true); search = ''; adjOpen = signal(false); adjWallet = ''; adjDir: 'credit' | 'debit' = 'credit';
   ngOnInit() { this.load(1); }
   load(p: number) { this.loading.set(true); this.page.set(p); this.api.get<any>('/admin/wallets', { search: this.search, page: p }).subscribe({ next: (r) => { this.items.set(r.items); this.total.set(r.total); this.loading.set(false); }, error: (e) => { this.loading.set(false); this.toast.err(e); } }); }
+  lw = signal<any>(null); lbusy = signal(false); lm: any = { mode: 'months', months: 1, days: 30, date: '' };
+  openLock(w: any) { this.lm = { mode: 'months', months: 1, days: 30, date: '' }; this.lw.set(w); }
+  saveLock() {
+    const w = this.lw(); if (!w) return; const m = this.lm; this.lbusy.set(true);
+    this.api.put<any>(`/admin/wallets/${w.user?._id}/lock`, { mode: m.mode, months: Number(m.months), days: Number(m.days), date: m.date || null }).subscribe({
+      next: () => { this.lbusy.set(false); this.lw.set(null); this.toast.ok('Lock updated'); this.load(this.page()); }, error: (e) => { this.lbusy.set(false); this.toast.err(e); } });
+  }
   adj(w: any, dir: 'credit' | 'debit') { this.adjWallet = w?.user?.userId || ''; this.adjDir = dir; this.adjOpen.set(false); setTimeout(() => this.adjOpen.set(true), 0); }
 }
