@@ -108,11 +108,7 @@ export class AdminSettingsPage implements OnInit {
     if (!/^\d{8,15}$/.test(String(s.contact.whatsapp || '').replace(/\D/g, ''))) return this.toast.err('Enter the WhatsApp number with country code, digits only');
     const body = { principalReturn: { ...s.principalReturn, percent: Number(s.principalReturn.percent), minPrincipal: toP(this.minPrincipal) },
       returns: { ...s.returns, monthlyPercent: mp, dailyPercent: dp, minBalance: toP(this.minBalance), startDate: s.returns.startDate || null, frequency: 'daily' },
-<<<<<<< HEAD
       referral: { ...s.referral, percent: Number(s.referral.percent), deposit: { ...s.referral.deposit, mode: s.referral.deposit.mode || 'percent', percent: Number(s.referral.deposit.percent), fixedAmount: toP(this.refFixed), minAmount: toP(this.refMinDeposit) }, earning: { ...s.referral.earning, percent: Number(s.referral.earning.percent) } },
-=======
-      referral: { ...s.referral, percent: Number(s.referral.percent), deposit: { ...s.referral.deposit, mode: s.referral.deposit.mode || 'percent', percent: Number(s.referral.deposit.percent), fixedAmount: toP(this.refFixed), minAmount: toP(this.refMinDeposit) }, holding: { ...s.referral.holding, percent: Number(s.referral.holding.percent) }, earning: { ...s.referral.earning, percent: Number(s.referral.earning.percent) } },
->>>>>>> 8de149ca5582b6ad3f6b6eda4c4cb5ab74168ef4
       wallet: { ...s.wallet, minWithdrawal: toP(this.minW), minDeposit: toP(this.minD), methods: this.methods.split(',').map((x) => x.trim()).filter(Boolean),
         tds: { ...s.wallet.tds, percent: Number(s.wallet.tds.percent) }, service: { ...s.wallet.service, percent: Number(s.wallet.service.percent) },
         principalLock: { ...s.wallet.principalLock, days: Number(s.wallet.principalLock.days || 0), date: s.wallet.principalLock.date || null } },
@@ -239,11 +235,9 @@ export class AdminReportsPage {
 export class AdminListPage implements OnInit {
   api = inject(Api); toast = inject(ToastService); route = inject(ActivatedRoute); inr = inr;
   kind = signal(''); items = signal<any[]>([]); total = signal(0); page = signal(1); loading = signal(true); search = ''; status = '';
-<<<<<<< HEAD
-  acct = signal<any>(null); note = signal<any>(null); remarks = ''; lk: any = { mode: 'default', months: 1, days: 30, date: '' };
-=======
-  acct = signal<any>(null); note = signal<any>(null); remarks = '';
->>>>>>> 8de149ca5582b6ad3f6b6eda4c4cb5ab74168ef4
+
+  acct = signal<any>(null); note = signal<any>(null); remarks = ''; 
+  lk: any = { mode: 'default', months: 1, days: 30, date: '' };
   private STATUSES: Record<string, string[]> = { deposits: ['pending', 'approved', 'rejected'], transfers: ['pending', 'completed', 'rejected'], withdrawals: ['pending', 'approved', 'processing', 'completed', 'rejected'], banks: ['pending', 'verified', 'rejected'], commissions: ['pending', 'approved', 'rejected'] };
   statuses = () => this.STATUSES[this.kind()] || []; hasStatus = () => !!this.STATUSES[this.kind()];
   title = () => ({ 'audit-logs': 'audit log', commissions: 'referral commissions', deposits: 'deposit requests', withdrawals: 'withdrawal requests', transfers: 'fund transfers', banks: 'bank accounts' } as any)[this.kind()] || this.kind();
@@ -260,15 +254,11 @@ export class AdminListPage implements OnInit {
     this.note.set({ title, text, required, danger, lockable, go: () => { if (required && this.remarks.trim().length < 3) return this.toast.err('Please add a remark'); const r = this.remarks.trim(); this.note.set(null); run(r); } });
   }
   private patch(url: string, body: any, msg: string) { this.api.patch(url, body).subscribe({ next: () => { this.toast.ok(msg); this.load(this.page()); }, error: (e) => this.toast.err(e) }); }
-<<<<<<< HEAD
   decide(d: any, status: string) {
     const toPrincipal = status === 'approved' && d.target !== 'earned';
     this.ask(status === 'approved' ? 'Approve deposit' : 'Reject deposit', `${inr(d.amount)} from ${d.user?.name}. ${status === 'approved' ? (toPrincipal ? 'This credits their principal balance. Choose how long it stays locked.' : 'This credits their earning wallet.') : ''}`, status === 'rejected', status === 'rejected',
       (r) => { const body: any = { status, remarks: r || undefined }; if (toPrincipal) body.lock = { mode: this.lk.mode, months: Number(this.lk.months), days: Number(this.lk.days), date: this.lk.date || null }; this.patch(`/admin/deposits/${d._id}`, body, 'Deposit ' + status); }, toPrincipal);
   }
-=======
-  decide(d: any, status: string) { this.ask(status === 'approved' ? 'Approve deposit' : 'Reject deposit', `${inr(d.amount)} from ${d.user?.name}. ${status === 'approved' ? 'This credits their principal balance.' : ''}`, status === 'rejected', status === 'rejected', (r) => this.patch(`/admin/deposits/${d._id}`, { status, remarks: r || undefined }, 'Deposit ' + status)); }
->>>>>>> 8de149ca5582b6ad3f6b6eda4c4cb5ab74168ef4
   xfer(t: any, status: string) { this.ask(status === 'completed' ? 'Approve transfer' : 'Reject transfer', `${inr(t.amount)} earned income from ${t.from?.name} to ${t.to?.name}. ${status === 'completed' ? "The recipient's earned income is credited." : 'The amount is refunded to the sender.'}`, status === 'rejected', status === 'rejected', (r) => this.patch(`/admin/transfers/${t._id}`, { status, remarks: r || undefined }, 'Transfer ' + (status === 'completed' ? 'approved' : 'rejected'))); }
   wd(w: any, status: string) { this.ask('Withdrawal: ' + status, `${inr(w.amount)} (net ${inr(w.net)}) for ${w.user?.name}. ${status === 'rejected' ? 'The full amount is refunded to the original balances.' : ''}`, status === 'rejected', status === 'rejected', (r) => this.patch(`/admin/withdrawals/${w._id}`, { status, remarks: r || undefined }, 'Withdrawal ' + status)); }
   bank(b: any, status: string) { this.ask(status === 'verified' ? 'Verify bank account' : 'Reject bank account', `${b.bankName} ${b.masked}`, status === 'rejected', status === 'rejected', (r) => this.patch(`/admin/banks/${b._id}`, { status, remarks: r || undefined }, 'Bank account ' + status)); }
