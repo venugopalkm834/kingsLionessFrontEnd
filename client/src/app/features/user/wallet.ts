@@ -1,6 +1,6 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
-import { Api, Auth, ToastService, inr, toPaise, uid, copyText, daysLeft } from '../../core/core';
+import { Api, Auth, ToastService, inr, toPaise, uid, copyText, daysLeft, fileUrl } from '../../core/core';
 import { COMMON, showErr } from '../../shared/common';
 
 @Component({ standalone: true, imports: COMMON, template: `
@@ -8,11 +8,19 @@ import { COMMON, showErr } from '../../shared/common';
   @if (!d()) { <app-skeleton [n]="3" [h]="150"/> } @else {
     <section class="whero">
       <div class="wtop">
-        <div class="grow"><div class="lbl">Available balance</div><div class="bal mono">{{inr(d().wallet.balance)}}</div>
+        <div class="grow"><div class="uname">{{me()?.name}}</div><div class="lbl">Available balance</div><div class="bal mono">{{inr(d().wallet.balance)}}</div>
           <div class="row wrap" style="gap:8px"><span class="wid">User ID <b>{{me()?.userId}}</b></span><button type="button" class="cp" (click)="copy(me()?.userId)"><lucide-icon name="copy" [size]="14"/> Copy</button></div></div>
-        <div class="today"><small>Today's calculated return</small><b class="mono">{{inr(d().todayReturn)}}</b>
-          <small>{{d().settings.returnsEnabled ? (d().settings.dailyPercent | number:'1.2-4') + '% a day' : 'Daily earning is inactive'}}</small></div>
+        <div class="today"><small>Earning per day</small><b class="mono">{{inr(d().earning.perDay)}}</b>
+          <small>{{d().settings.dailyPercent | number:'1.2-4'}}% a day on your {{baseLabel()}} ({{inr(d().earning.baseAmount)}})</small>
+          @if (d().settings.inputMode === 'monthly') { <small>{{d().settings.monthlyPercent}}% monthly ÷ {{d().settings.daysBasis === 'fixed30' ? '30 days' : 'days in the month'}}</small> }
+          @if (!d().settings.returnsEnabled) { <small class="warn">Not active yet. This is an estimate.</small> }
+          @else if (!d().earning.qualifies) { <small class="warn">Minimum {{inr(d().earning.minBalance)}} in your {{baseLabel()}} to qualify</small> }
+          <small>Per month about {{inr(d().earning.perMonth)}} · Earned so far {{inr(d().earning.totalEarned)}}</small>
+        </div>
       </div>
+      <div class="refinc"><div class="sm lb">Referral commission</div>
+        @if (d().referralIncome.display === 'daily') { <div class="rv"><b class="mono">{{inr(d().referralIncome.today)}}</b><span>today</span></div><div class="sm muted">Overall: <b class="mono">{{inr(d().referralIncome.total)}}</b></div> }
+        @else { <div class="rv"><b class="mono">{{inr(d().referralIncome.total)}}</b><span>overall</span></div><div class="sm muted">Today: <b class="mono">{{inr(d().referralIncome.today)}}</b></div> }</div>
       <div class="split">
         <div><small>Principal</small><b class="mono">{{inr(d().wallet.principal)}}</b></div>
         <div><small>Earned income</small><b class="mono">{{inr(d().wallet.earned)}}</b></div>
@@ -65,14 +73,40 @@ import { COMMON, showErr } from '../../shared/common';
   </div>
 
   <app-modal [open]="mode() === 'deposit'" [drawer]="true" title="Deposit funds" (close)="mode.set('')">
-    <p class="sm muted mb">{{info()?.wallet?.depositInstructions}} Your wallet is credited only after an administrator verifies the payment.</p>
-    @if (d()?.settings.principalLock.enabled) { <div class="note mb">Deposits are held as <b>principal</b>. {{lockText()}}</div> }
-    <form [formGroup]="df" (ngSubmit)="deposit()" novalidate>
-      <div class="field" [class.err]="er(df, 'amount')"><label for="d-amt">Amount (₹)</label><input id="d-amt" type="number" inputmode="decimal" formControlName="amount" min="1"><span class="hint">Minimum {{inr(info()?.wallet?.minDeposit)}}</span><span class="err-t">{{er(df, 'amount') ? 'Enter an amount' : ''}}</span></div>
-      <div class="field"><label for="d-met">Payment method</label><select id="d-met" formControlName="method">@for (m of info()?.wallet?.methods || []; track m) { <option [value]="m">{{m}}</option> }</select></div>
-      <div class="field" [class.err]="er(df, 'txnRef')"><label for="d-ref">Transaction ID / UTR (required)</label><input id="d-ref" formControlName="txnRef"><span class="err-t">{{er(df, 'txnRef') ? 'Enter the reference number (min 4 characters)' : ''}}</span></div>
-      <div class="field" [class.err]="!!fileErr()"><label for="d-file">Payment receipt (optional · PNG, JPG, WEBP or PDF · max 5 MB)</label><input id="d-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" (change)="pick($event)"><span class="err-t">{{fileErr()}}</span></div>
-      <button class="btn btn-primary btn-block" [disabled]="busy()">{{busy() ? 'Submitting…' : 'Submit deposit request'}}</button></form>
+    @if (accLoading()) { <app-skeleton [n]="2" [h]="90"/> }
+    @else if (!accounts().length) { <app-empty title="Deposits are not open yet" text="The administrator has not added a payment account. Please contact support."/> }
+    @else {
+      <p class="sm muted mb">{{info()?.wallet?.depositInstructions}} Your wallet is credited only after an administrator verifies the payment.</p>
+      <div class="step"><span class="n">1</span><b>Pay to this account</b></div>
+      @if (accounts().length > 1) { <div class="chips-scroll mb">@for (a of accounts(); track a._id) { <button type="button" class="chip" [class.on]="payAcc()?._id === a._id" (click)="pickAcc(a)">{{a.label || (a.type === 'upi' ? 'UPI · ' + a.upiId : a.bankName)}}</button> }</div> }
+      @if (payAcc(); as a) {
+        <div class="pay">
+          @if (a.type === 'upi') {
+            <div class="pr"><span>UPI ID</span><b class="mono">{{a.upiId}}</b><button type="button" class="cp2" (click)="copy(a.upiId)"><lucide-icon name="copy" [size]="14"/> Copy</button></div>
+            @if (a.holderName) { <div class="pr"><span>Name</span><b>{{a.holderName}}</b></div> }
+            @if (a.qrImage) { <img [src]="fu(a.qrImage)" class="qr" alt="UPI QR code"> }
+          } @else {
+            <div class="pr"><span>Account holder</span><b>{{a.holderName}}</b></div>
+            <div class="pr"><span>Bank</span><b>{{a.bankName}}@if (a.branch) { · {{a.branch}} }</b></div>
+            <div class="pr"><span>Account number</span><b class="mono">{{a.accountNumber}}</b><button type="button" class="cp2" (click)="copy(a.accountNumber)"><lucide-icon name="copy" [size]="14"/> Copy</button></div>
+            <div class="pr"><span>IFSC</span><b class="mono">{{a.ifsc}}</b><button type="button" class="cp2" (click)="copy(a.ifsc)"><lucide-icon name="copy" [size]="14"/> Copy</button></div>
+            <div class="pr"><span>Account type</span><b style="text-transform:capitalize">{{a.accountType}}</b></div>
+            @if (a.qrImage) { <img [src]="fu(a.qrImage)" class="qr" alt="QR code"> }
+          }
+          @if (a.note) { <p class="sm muted" style="margin-top:8px">{{a.note}}</p> }
+        </div>
+      }
+      <div class="step mt"><span class="n">2</span><b>After paying, send your deposit request</b></div>
+      <form [formGroup]="df" (ngSubmit)="deposit()" novalidate>
+        <div class="field"><label>Add this deposit to</label>
+          <div class="seg"><label [class.on]="df.value.target === 'principal'"><input type="radio" formControlName="target" value="principal"> Principal wallet</label><label [class.on]="df.value.target === 'earned'"><input type="radio" formControlName="target" value="earned"> Earning wallet</label></div>
+          <span class="hint">@if (df.value.target === 'principal') { Held as principal. {{lockText()}} } @else { Added to your earned income, which can be withdrawn or transferred. }</span></div>
+        <div class="field" [class.err]="er(df, 'amount')"><label for="d-amt">Amount (₹)</label><input id="d-amt" type="number" inputmode="decimal" formControlName="amount" min="1"><span class="hint">Minimum {{inr(info()?.wallet?.minDeposit)}}</span><span class="err-t">{{er(df, 'amount') ? 'Enter an amount' : ''}}</span></div>
+        @if (payAcc()?.type === 'bank') { <div class="field"><label for="d-met">Payment method</label><select id="d-met" formControlName="method">@for (m of bankMethods(); track m) { <option [value]="m">{{m}}</option> }</select></div> }
+        <div class="field" [class.err]="er(df, 'txnRef')"><label for="d-ref">Transaction ID / UTR (required)</label><input id="d-ref" formControlName="txnRef"><span class="err-t">{{er(df, 'txnRef') ? 'Enter the reference number (min 4 characters)' : ''}}</span></div>
+        <div class="field" [class.err]="!!fileErr()"><label for="d-file">Payment receipt (optional · PNG, JPG, WEBP or PDF · max 5 MB)</label><input id="d-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" (change)="pick($event)"><span class="err-t">{{fileErr()}}</span></div>
+        <button class="btn btn-primary btn-block" [disabled]="busy() || !payAcc()">{{busy() ? 'Submitting…' : 'Submit deposit request'}}</button></form>
+    }
   </app-modal>
 
   <app-modal [open]="mode() === 'withdraw'" [drawer]="true" title="Withdraw funds" (close)="mode.set('')">
@@ -95,8 +129,8 @@ import { COMMON, showErr } from '../../shared/common';
 
   <app-modal [open]="mode() === 'transfer'" [drawer]="true" [title]="receipt() ? 'Transfer receipt' : 'Transfer funds'" (close)="mode.set('')">
     @if (receipt(); as r) {
-      <div class="center"><div class="okc"><lucide-icon name="check" [size]="28"/></div><h3>Transfer successful</h3><div class="big mono">{{inr(r.amount)}}</div></div>
-      <dl class="dl mt mb"><dt>To</dt><dd>{{r.recipientName}} ({{r.toUserId}})</dd><dt>From</dt><dd>{{r.source === 'earned' ? 'Earned income' : 'Principal'}}</dd>@if (r.lockUntil) { <dt>Recipient lock</dt><dd>Until {{r.lockUntil | date:'mediumDate'}}</dd> }<dt>Reference</dt><dd class="mono">{{r.reference}}</dd><dt>Date</dt><dd>{{r.createdAt | date:'medium'}}</dd>@if (r.note) { <dt>Note</dt><dd>{{r.note}}</dd> }</dl>
+      <div class="center"><div class="okc"><lucide-icon name="check" [size]="28"/></div><h3>Transfer request sent</h3><div class="big mono">{{inr(r.amount)}}</div><p class="sm muted" style="margin-top:6px">It is waiting for admin approval. The amount is held from your earned income and refunded if the request is rejected.</p></div>
+      <dl class="dl mt mb"><dt>To</dt><dd>{{r.recipientName}} ({{r.toUserId}})</dd><dt>From</dt><dd>Earned income</dd><dt>Status</dt><dd>Pending admin approval</dd><dt>Reference</dt><dd class="mono">{{r.reference}}</dd><dt>Date</dt><dd>{{r.createdAt | date:'medium'}}</dd>@if (r.note) { <dt>Note</dt><dd>{{r.note}}</dd> }</dl>
       <button type="button" class="btn btn-ghost btn-block" (click)="mode.set('')">Done</button>
     } @else {
       <form [formGroup]="tf" (ngSubmit)="lookup()" novalidate>
@@ -106,20 +140,24 @@ import { COMMON, showErr } from '../../shared/common';
           <span class="err-t">{{vErr() ? (tf.value.by === 'mobile' ? 'Enter a valid 10-digit mobile number' : 'User ID looks like KL20260000') : lookupErr()}}</span>
           @if (looking()) { <span class="hint">Searching…</span> }
           @if (found(); as f) { <div class="found"><lucide-icon name="check" [size]="16"/> <div><b>{{f.name}}</b><div class="sm muted">{{f.userId}} · {{f.mobile}}</div></div></div> }</div>
-        <div class="field"><label for="t-s">Transfer from</label><select id="t-s" formControlName="source" (change)="rcpt.set(null)"><option value="principal">Principal ({{inr(d().wallet.principal)}})</option><option value="earned">Earned income ({{inr(d().wallet.earned)}})</option></select>
-          <span class="hint">@if (tf.value.source === 'earned') { Earned income stays in the recipient's earned section and can be withdrawn by them. } @else if (d().lock.locked) { Your principal is locked{{d().lock.unlockAt ? ' until ' + (d().lock.unlockAt | date:'mediumDate') : ''}}. The recipient's received principal stays locked for the same period. } @else { Principal is currently unlocked, so the recipient receives it unlocked. }</span></div>
+        <div class="note mb">Only <b>earned income</b> can be transferred (available: <b>{{inr(d().wallet.earned)}}</b>). Principal cannot be transferred. Every transfer is sent to the admin for approval before the recipient receives it.</div>
         <div class="field" [class.err]="er(tf, 'amount') || aErr()"><label for="t-a">Amount (₹)</label><input id="t-a" type="number" inputmode="decimal" formControlName="amount" (input)="rcpt.set(null)"><span class="err-t">{{aErr()}}</span></div>
         <div class="field"><label for="t-n">Description</label><input id="t-n" formControlName="note"></div>
         @if (!rcpt()) { <button class="btn btn-primary btn-block" [disabled]="busy()">{{busy() ? 'Checking…' : 'Review transfer'}}</button> }
       </form>
       @if (rcpt(); as r) {
         <div class="sum"><div class="row between"><span>Recipient</span><b>{{r.name}}</b></div><div class="row between"><span>User ID</span><b class="mono">{{r.userId}}</b></div>@if (r.mobile) { <div class="row between"><span>Mobile</span><b class="mono">{{r.mobile}}</b></div> }
-          <div class="row between"><span>From</span><b>{{tf.value.source === 'earned' ? 'Earned income' : 'Principal'}}</b></div>
-          @if (tf.value.source === 'principal' && d().lock.locked) { <div class="row between"><span>Recipient lock</span><b>{{d().lock.unlockAt ? 'Until ' + (d().lock.unlockAt | date:'mediumDate') : 'Locked'}}</b></div> }
+          <div class="row between"><span>From</span><b>Earned income</b></div><div class="row between"><span>Approval</span><b>Admin approval required</b></div>
           <div class="row between tot"><span>Amount</span><b class="mono">{{inr(tp(tf.value.amount))}}</b></div></div>
-        <div class="row mt"><button type="button" class="btn btn-ghost grow" (click)="rcpt.set(null)">Edit</button><button type="button" class="btn btn-gold grow" [disabled]="busy()" (click)="transfer()">{{busy() ? 'Sending…' : 'Confirm transfer'}}</button></div> } }
+        <div class="row mt"><button type="button" class="btn btn-ghost grow" (click)="rcpt.set(null)">Edit</button><button type="button" class="btn btn-gold grow" [disabled]="busy()" (click)="transfer()">{{busy() ? 'Sending…' : 'Send for approval'}}</button></div> } }
   </app-modal>`,
   styles: [`
+  .warn{color:var(--gold-2)!important;font-weight:600}.refinc{display:grid;gap:4px;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px 16px;margin-bottom:14px;color:#EDE9DD}.refinc .lb,.refinc .muted{color:#9A9482}.refinc .rv{display:flex;gap:8px;align-items:baseline}.refinc .rv b{font:800 1.5rem var(--display);color:var(--gold-2)}.refinc .rv span{color:#9A9482;font-size:.85rem}
+  .uname{font:700 1.05rem var(--display);color:var(--gold-2);margin-bottom:6px;overflow-wrap:anywhere}
+  .step{display:flex;gap:10px;align-items:center;margin-bottom:10px}.step .n{width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--gold-2);display:grid;place-items:center;font:800 .8rem var(--font);flex:none}
+  .pay{background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:12px 14px;display:grid;gap:8px}.pr{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:.9rem}.pr span{color:var(--muted)}.pr b{overflow-wrap:anywhere}
+  .cp2{border:0;background:rgba(212,165,58,.18);color:var(--gold-deep);border-radius:999px;padding:5px 10px;cursor:pointer;font:600 .76rem var(--font);display:inline-flex;gap:5px;align-items:center}.qr{width:min(220px,100%);height:auto;border-radius:12px;border:1px solid var(--border);background:#fff;justify-self:center}
+  .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}.seg label{display:flex;gap:8px;align-items:center;justify-content:center;border:1.5px solid var(--border);border-radius:12px;padding:11px;font-weight:600;font-size:.9rem;cursor:pointer;background:#fff}.seg label.on{border-color:var(--gold);background:var(--gold-50)}.seg input{accent-color:var(--gold-deep)}
   .whero{background:radial-gradient(520px 260px at 90% 0,#5A4A1A,transparent 70%),var(--ink);color:#EFEBDF;border-radius:26px;padding:30px;box-shadow:var(--sh-md);position:relative;overflow:hidden;border:1px solid rgba(212,165,58,.4)}
   .wtop{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:flex-end}.lbl{font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:#9A9482}
   .bal{font:800 clamp(2.3rem,7.5vw,4.4rem)/1.05 var(--display);letter-spacing:-.04em;margin:6px 0 12px;color:#fff;overflow-wrap:anywhere}
@@ -147,12 +185,16 @@ export class WalletPage implements OnInit {
   api = inject(Api); toast = inject(ToastService); fb = inject(FormBuilder);
   inr = inr; days = daysLeft; tp = (v: any) => toPaise(v); er = (f: any, n: string) => showErr(f.get(n));
   d = signal<any>(null); info = signal<any>(null); tx = signal<any[]>([]); txPage = signal(1); txTotal = signal(0); rets = signal<any[]>([]); banks = signal<any[]>([]);
-  types = ['', 'deposit', 'withdrawal', 'withdrawal_refund', 'transfer_in', 'transfer_out', 'return', 'referral', 'adjustment']; type = signal('');
+  types = ['', 'deposit', 'withdrawal', 'withdrawal_refund', 'transfer_in', 'transfer_out', 'transfer_refund', 'return', 'referral', 'adjustment']; type = signal('');
   mode = signal(''); busy = signal(false); file: File | null = null; fileErr = signal(''); rcpt = signal<any>(null); receipt = signal<any>(null); private key = uid();
-  df = this.fb.nonNullable.group({ amount: [null as number | null, [Validators.required, Validators.min(1)]], method: ['UPI'], txnRef: ['', [Validators.required, Validators.minLength(4)]] });
+  df = this.fb.nonNullable.group({ amount: [null as number | null, [Validators.required, Validators.min(1)]], method: ['UPI'], txnRef: ['', [Validators.required, Validators.minLength(4)]], target: ['principal' as 'principal' | 'earned'] });
+  accounts = signal<any[]>([]); payAcc = signal<any>(null); accLoading = signal(false); fu = fileUrl;
   wf = this.fb.nonNullable.group({ amount: [null as number | null, [Validators.required, Validators.min(1)]], bankId: [''], notes: [''] });
-  tf = this.fb.nonNullable.group({ by: ['userId'], value: ['', Validators.required], source: ['principal'], amount: [null as number | null, [Validators.required, Validators.min(1)]], note: [''] });
+  tf = this.fb.nonNullable.group({ by: ['userId'], value: ['', Validators.required], amount: [null as number | null, [Validators.required, Validators.min(1)]], note: [''] });
 
+  bankMethods() { const m = (this.info()?.wallet?.methods || []).filter((x: string) => !/upi/i.test(x)); return m.length ? m : ['Bank Transfer']; }
+  pickAcc(a: any) { if (!a) { this.payAcc.set(null); return; } this.payAcc.set(a); this.df.patchValue({ method: a.type === 'upi' ? 'UPI' : this.bankMethods()[0] }); }
+  baseLabel() { const k = this.d()?.earning?.baseKey; return k === 'earned' ? 'earning wallet' : k === 'balance' ? 'total amount' : 'principal'; }
   amountP() { return toPaise(this.wf.value.amount); }
   fees() {
     const s = this.d()?.settings; const a = this.amountP(); if (!s) return { tds: 0, service: 0, fee: 0, net: a };
@@ -176,6 +218,7 @@ export class WalletPage implements OnInit {
   async copy(t: string) { const ok = await copyText(t); this.toast.show(ok ? 'ok' : 'err', ok ? 'Copied' : 'Could not copy'); }
   open(m: string) {
     this.key = uid(); this.mode.set(m); this.receipt.set(null); this.rcpt.set(null); this.busy.set(false); this.load();
+    if (m === 'deposit') { this.accLoading.set(true); this.api.get<any[]>('/payment-accounts').subscribe({ next: (a) => { this.accounts.set(a); this.accLoading.set(false); this.pickAcc(a.find((x) => x._id === this.payAcc()?._id) || a[0]); }, error: (e) => { this.accLoading.set(false); this.toast.err(e); } }); }
     if (m === 'withdraw') this.api.get<any[]>('/banks').subscribe((b) => { const v = b.filter((x) => x.status === 'verified'); this.banks.set(v); this.wf.patchValue({ bankId: (v.find((x) => x.isDefault) || v[0])?._id || '' }); });
   }
   pick(e: Event) { const f = (e.target as HTMLInputElement).files?.[0] || null; this.file = f; this.fileErr.set(f && f.size > 5 * 1024 * 1024 ? 'File is larger than 5 MB' : ''); }
@@ -183,9 +226,10 @@ export class WalletPage implements OnInit {
   fail = (e: any) => { this.busy.set(false); this.toast.err(e); };
   deposit() {
     this.df.markAllAsTouched(); if (this.df.invalid) return;
-    if (this.fileErr()) return;
-    const v = this.df.getRawValue(); const fd = new FormData(); fd.append('amount', String(toPaise(v.amount))); fd.append('method', v.method); fd.append('txnRef', v.txnRef.trim()); if (this.file) fd.append('proof', this.file); this.busy.set(true);
-    this.api.post('/wallet/deposits', fd, this.key).subscribe({ next: () => { this.mode.set(''); this.df.reset({ method: 'UPI' }); this.file = null; this.fileErr.set(''); this.done('Deposit request submitted. Status: Pending'); }, error: this.fail });
+    if (this.fileErr()) return; const acc = this.payAcc(); if (!acc) { this.toast.err('Choose the account you paid to'); return; }
+    const v = this.df.getRawValue(); const fd = new FormData(); fd.append('amount', String(toPaise(v.amount))); fd.append('method', acc.type === 'upi' ? 'UPI' : v.method); fd.append('txnRef', v.txnRef.trim());
+    fd.append('paymentAccountId', acc._id); fd.append('target', v.target); if (this.file) fd.append('proof', this.file); this.busy.set(true);
+    this.api.post('/wallet/deposits', fd, this.key).subscribe({ next: () => { this.mode.set(''); this.df.reset({ method: 'UPI', target: 'principal' }); this.file = null; this.fileErr.set(''); this.done('Deposit request submitted. Status: Pending'); }, error: this.fail });
   }
   withdraw() {
     this.wf.markAllAsTouched(); if (this.wf.invalid || !this.wf.value.bankId || this.wErr()) return;
@@ -201,7 +245,7 @@ export class WalletPage implements OnInit {
     this.timer = setTimeout(() => this.api.get<any>('/wallet/lookup', { by: v.by, value: v.by === 'mobile' ? v.value : v.value.toUpperCase() }).subscribe({
       next: (r) => { this.looking.set(false); if (this.tf.value.value === v.value) this.found.set(r); }, error: (e) => { this.looking.set(false); this.lookupErr.set(e?.error?.message || 'No user found'); } }), 350);
   }
-  aErr() { const v = this.tf.value; const amt = toPaise(v.amount); if (!this.tf.get('amount')?.touched) return ''; if (!(amt >= 1)) return 'Enter an amount'; const avail = v.source === 'earned' ? this.d().wallet.earned : this.d().wallet.principal; return amt > avail ? 'More than your available ' + (v.source === 'earned' ? 'earned income' : 'principal') : ''; }
+  aErr() { const amt = toPaise(this.tf.value.amount); if (!this.tf.get('amount')?.touched) return ''; if (!(amt >= 1)) return 'Enter an amount'; return amt > this.d().wallet.earned ? 'More than your available earned income' : ''; }
   lookup() {
     this.tf.markAllAsTouched(); if (this.tf.invalid || !this.validVal() || this.aErr()) return;
     if (!this.found()) { this.toast.err(this.lookupErr() || 'Recipient not found yet. Check the details.'); return; }
@@ -209,6 +253,6 @@ export class WalletPage implements OnInit {
   }
   transfer() {
     const v = this.tf.getRawValue(); this.busy.set(true);
-    this.api.post<any>('/wallet/transfers', { by: v.by, value: v.by === 'mobile' ? v.value : v.value.toUpperCase(), source: v.source, amount: toPaise(v.amount), note: v.note || undefined }, this.key).subscribe({ next: (r) => { this.receipt.set(r); this.tf.reset({ by: 'userId', source: 'principal' }); this.found.set(null); this.rcpt.set(null); this.done('Transfer complete'); }, error: this.fail });
+    this.api.post<any>('/wallet/transfers', { by: v.by, value: v.by === 'mobile' ? v.value : v.value.toUpperCase(), source: 'earned', amount: toPaise(v.amount), note: v.note || undefined }, this.key).subscribe({ next: (r) => { this.receipt.set(r); this.tf.reset({ by: 'userId' }); this.found.set(null); this.rcpt.set(null); this.done('Transfer request sent for admin approval'); }, error: this.fail });
   }
 }
