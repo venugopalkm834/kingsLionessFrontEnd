@@ -4,7 +4,8 @@ import { Router, CanActivateFn } from '@angular/router';
 import { tap, catchError, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
 
-export interface Me { id: string; userId: string; name: string; username: string; email: string; mobile: string; role: 'user' | 'admin'; referralCode: string;
+export interface Nominee { name: string; relation: string; mobile?: string; dob?: string; address?: string; }
+export interface Me { id: string; userId: string; name: string; username: string; email?: string; mobile: string; role: 'user' | 'admin'; referralCode: string; nominee?: Nominee;
   avatar?: string; address?: string; city?: string; state?: string; pin?: string; status: string; createdAt: string; }
 
 @Injectable({ providedIn: 'root' })
@@ -30,6 +31,7 @@ export class Auth {
   isAdmin = computed(() => this.me()?.role === 'admin');
   get token() { return read('kl_token'); }
   private save = (r: { token: string; user: Me }) => { write('kl_token', r.token); write('kl_user', JSON.stringify(r.user)); this.me.set(r.user); };
+  /** Customers sign in with mobile number OR username; the admin console uses email or username. */
   login(identifier: string, password: string, admin = false) { return this.api.post<{ token: string; user: Me }>(admin ? '/auth/admin/login' : '/auth/login', { identifier, password }).pipe(tap(this.save)); }
   register(b: any) { return this.api.post<{ token: string; user: Me }>('/auth/register', b).pipe(tap(this.save)); }
   refresh() { return this.api.get<Me>('/auth/me').pipe(tap((u) => { write('kl_user', JSON.stringify(u)); this.me.set(u); })); }
@@ -45,6 +47,13 @@ export const userGuard: CanActivateFn = (_route, state) => { const a = inject(Au
 export const adminGuard: CanActivateFn = () => { const a = inject(Auth); const r = inject(Router); return a.me()?.role === 'admin' ? true : r.parseUrl('/admin/login'); };
 
 export interface Toast { id: number; kind: 'ok' | 'err'; text: string; }
+/** Unread admin notifications: the bell in the admin header shows this number. */
+@Injectable({ providedIn: 'root' })
+export class AdminAlerts {
+  private api = inject(Api); unread = signal(0);
+  refresh() { this.api.get<{ count: number }>('/admin/notifications/unread').subscribe({ next: (r) => this.unread.set(r.count || 0), error: () => {} }); }
+}
+
 @Injectable({ providedIn: 'root' })
 export class ToastService {
   items = signal<Toast[]>([]); private n = 0;

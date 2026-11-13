@@ -1,12 +1,12 @@
 {
   "/api": {
-    "target": "https://kingslionessbackend.onrender.com/api",
-    "secure": true,
+    "target": "http://localhost:4000",
+    "secure": false,
     "changeOrigin": true
   },
   "/uploads": {
-    "target": "https://kingslionessbackend.onrender.com/api",
-    "secure": true,
+    "target": "http://localhost:4000",
+    "secure": false,
     "changeOrigin": true
   }
 }
