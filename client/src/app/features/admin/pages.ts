@@ -227,10 +227,21 @@ export class AdminServicesPage implements OnInit {
   <div class="card flat mb"><div class="row wrap"><input class="grow" style="min-width:200px" [(ngModel)]="search" (keyup.enter)="load(1)" placeholder="Search user ID, name or mobile…"><button type="button" class="btn btn-primary btn-sm" (click)="load(1)">Search</button></div></div>
   @if (loading()) { <app-skeleton [n]="6"/> } @else if (!items().length) { <div class="card"><app-empty title="No wallets found"/></div> } @else {
   <div class="tbl-wrap"><table class="stack-m"><thead><tr><th>User</th><th>Balance</th><th>Principal</th><th>Earned</th><th>Principal lock</th><th>Total returns</th><th>Actions</th></tr></thead><tbody>
+  <div class="tbl-wrap"><table class="stack-m"><thead><tr><th>User</th><th>Balance</th><th>Principal</th><th>Earned</th><th>Principal lock</th><th>Total returns</th><th>Actions</th></tr></thead><tbody>
   @for (w of items(); track w._id) { <tr><td data-l="User"><b>{{w.user?.name}}</b><div class="sm muted">{{w.user?.userId}}</div></td><td data-l="Balance"><b>{{inr(w.balance)}}</b></td>
     <td data-l="Principal">{{inr(w.principal)}}</td><td data-l="Earned">{{inr(w.earned)}}</td><td data-l="Principal lock">@if (w.lock?.locked) { <b>Locked</b><div class="sm muted">{{w.lock.unlockAt ? ('until ' + (w.lock.unlockAt | date:'d MMM y')) : 'date not set'}}</div> } @else { <span class="sm muted">{{w.principal > 0 ? 'Unlocked' : '—'}}</span> }</td><td data-l="Total returns">{{inr(w.totalReturns)}}</td>
     <td data-l="Actions"><div class="row wrap" style="gap:6px"><button type="button" class="btn btn-ok btn-sm" (click)="adj(w,'credit')">Add</button><button type="button" class="btn btn-ghost btn-sm" (click)="adj(w,'debit')">Deduct</button><button type="button" class="btn btn-ghost btn-sm" (click)="openLock(w)">Lock</button></div></td></tr> }</tbody></table></div>
+    <td data-l="Principal">{{inr(w.principal)}}</td><td data-l="Earned">{{inr(w.earned)}}</td><td data-l="Principal lock">@if (w.lock?.locked) { <b>Locked</b><div class="sm muted">{{w.lock.unlockAt ? ('until ' + (w.lock.unlockAt | date:'d MMM y')) : 'date not set'}}</div> } @else { <span class="sm muted">{{w.principal > 0 ? 'Unlocked' : '—'}}</span> }</td><td data-l="Total returns">{{inr(w.totalReturns)}}</td>
+    <td data-l="Actions"><div class="row wrap" style="gap:6px"><button type="button" class="btn btn-ok btn-sm" (click)="adj(w,'credit')">Add</button><button type="button" class="btn btn-ghost btn-sm" (click)="adj(w,'debit')">Deduct</button><button type="button" class="btn btn-ghost btn-sm" (click)="openLock(w)">Lock</button></div></td></tr> }</tbody></table></div>
   <app-pager [page]="page()" [limit]="10" [total]="total()" (go)="load($event)"/> }
+  <app-adjust [open]="adjOpen()" [wallet]="adjWallet" [direction]="adjDir" (close)="adjOpen.set(false)" (done)="load(page())"/>
+  <app-modal [open]="!!lw()" title="Principal lock" (close)="lw.set(null)">@if (lw(); as w) {
+    <p class="muted sm mb">{{w.user?.name}} ({{w.user?.userId}}) · principal {{inr(w.principal)}} · @if (w.lock?.locked) { locked {{w.lock.unlockAt ? ('until ' + (w.lock.unlockAt | date:'d MMM y')) : '(no date set yet)'}} } @else { unlocked }</p>
+    <div class="field"><label>Set lock</label><select [(ngModel)]="lm.mode"><option value="months">Lock for a number of months</option><option value="days">Lock for a number of days</option><option value="date">Lock until a date</option><option value="unlock">Unlock now</option><option value="default">Back to the default rule (Settings)</option></select></div>
+    @if (lm.mode==='months') { <div class="field"><label>Months from today (12 = one year)</label><input type="number" min="1" max="120" [(ngModel)]="lm.months"></div> }
+    @if (lm.mode==='days') { <div class="field"><label>Days from today</label><input type="number" min="0" max="3650" [(ngModel)]="lm.days"></div> }
+    @if (lm.mode==='date') { <div class="field"><label>Unlock date</label><input type="date" [(ngModel)]="lm.date"></div> }
+    <button type="button" class="btn btn-primary btn-block" [disabled]="lbusy()" (click)="saveLock()">{{lbusy() ? 'Saving…' : 'Save lock'}}</button> }</app-modal>`})
   <app-adjust [open]="adjOpen()" [wallet]="adjWallet" [direction]="adjDir" (close)="adjOpen.set(false)" (done)="load(page())"/>
   <app-modal [open]="!!lw()" title="Principal lock" (close)="lw.set(null)">@if (lw(); as w) {
     <p class="muted sm mb">{{w.user?.name}} ({{w.user?.userId}}) · principal {{inr(w.principal)}} · @if (w.lock?.locked) { locked {{w.lock.unlockAt ? ('until ' + (w.lock.unlockAt | date:'d MMM y')) : '(no date set yet)'}} } @else { unlocked }</p>
@@ -244,6 +255,13 @@ export class AdminWalletsPage implements OnInit {
   items = signal<any[]>([]); total = signal(0); page = signal(1); loading = signal(true); search = ''; adjOpen = signal(false); adjWallet = ''; adjDir: 'credit' | 'debit' = 'credit';
   ngOnInit() { this.load(1); }
   load(p: number) { this.loading.set(true); this.page.set(p); this.api.get<any>('/admin/wallets', { search: this.search, page: p }).subscribe({ next: (r) => { this.items.set(r.items); this.total.set(r.total); this.loading.set(false); }, error: (e) => { this.loading.set(false); this.toast.err(e); } }); }
+  lw = signal<any>(null); lbusy = signal(false); lm: any = { mode: 'months', months: 1, days: 30, date: '' };
+  openLock(w: any) { this.lm = { mode: 'months', months: 1, days: 30, date: '' }; this.lw.set(w); }
+  saveLock() {
+    const w = this.lw(); if (!w) return; const m = this.lm; this.lbusy.set(true);
+    this.api.put<any>(`/admin/wallets/${w.user?._id}/lock`, { mode: m.mode, months: Number(m.months), days: Number(m.days), date: m.date || null }).subscribe({
+      next: () => { this.lbusy.set(false); this.lw.set(null); this.toast.ok('Lock updated'); this.load(this.page()); }, error: (e) => { this.lbusy.set(false); this.toast.err(e); } });
+  }
   lw = signal<any>(null); lbusy = signal(false); lm: any = { mode: 'months', months: 1, days: 30, date: '' };
   openLock(w: any) { this.lm = { mode: 'months', months: 1, days: 30, date: '' }; this.lw.set(w); }
   saveLock() {
