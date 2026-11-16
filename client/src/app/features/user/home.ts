@@ -38,8 +38,7 @@ const DEFAULT_SERVICES = [
       <div class="facts"><div><b>6</b><span>service lines</span></div><div><b>24 h</b><span>booking response</span></div><div><b>1</b><span>wallet for everything</span></div></div>
     </div>
     <div class="collage" aria-hidden="true">
-      <img class="c1" src="assets/services/civil-works.svg" alt=""><img class="c2" src="assets/services/home-appliances.svg" alt=""><img class="c3" src="assets/services/logistics.svg" alt="">
-      <span class="stamp"><img src="assets/brand/logo-mark.png" alt=""></span>
+      <img class="c1" src="assets/services/civil-works.jpg" alt=""><img class="c2" src="assets/services/home-appliances.jpg" alt=""><img class="c3" src="assets/services/logistics.jpg" alt="">
     </div></div></section>
 
   <section id="services" class="sec container">

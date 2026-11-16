@@ -72,7 +72,7 @@ import { Api, Auth, Site, fileUrl } from '../../core/core';
   .drawer-nav nav .cta{background:var(--gold);color:#1A1405;text-align:center;margin-top:6px}.drawer-nav hr{border:0;border-top:1px solid rgba(255,255,255,.1);margin:8px 0}
   .wa-big{margin-top:auto;display:flex;gap:10px;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--gold-2),var(--gold));color:#1A1405;padding:14px;border-radius:14px;font-weight:700}
   .bottom{display:none}
-  @media(max-width:1020px){.links{display:none}.tools{margin-left:auto}.burger{display:grid}}
+  @media(max-width:1020px){.links{display:none}.tools{margin-left:auto}.burger{display:grid;margin-left:80px}}
   @media(max-width:900px){.fgrid{grid-template-columns:1fr 1fr}}
   @media(max-width:700px){
     .bar{min-height:60px;gap:10px}.mk{height:38px}.wm{height:26px}.contact span{display:none}.contact{width:40px;height:40px;padding:0;justify-content:center;border-radius:12px}.hide-s{display:none}
