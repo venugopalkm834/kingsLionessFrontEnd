@@ -129,8 +129,8 @@ import { COMMON, showErr } from '../../shared/common';
 
   <app-modal [open]="mode() === 'transfer'" [drawer]="true" [title]="receipt() ? 'Transfer receipt' : 'Transfer funds'" (close)="mode.set('')">
     @if (receipt(); as r) {
-      <div class="center"><div class="okc"><lucide-icon name="check" [size]="28"/></div><h3>Transfer request sent</h3><div class="big mono">{{inr(r.amount)}}</div><p class="sm muted" style="margin-top:6px">It is waiting for admin approval. The amount is held from your earned income and refunded if the request is rejected.</p></div>
-      <dl class="dl mt mb"><dt>To</dt><dd>{{r.recipientName}} ({{r.toUserId}})</dd><dt>From</dt><dd>Earned income</dd><dt>Status</dt><dd>Pending admin approval</dd><dt>Reference</dt><dd class="mono">{{r.reference}}</dd><dt>Date</dt><dd>{{r.createdAt | date:'medium'}}</dd>@if (r.note) { <dt>Note</dt><dd>{{r.note}}</dd> }</dl>
+      <div class="center"><div class="okc"><lucide-icon name="check" [size]="28"/></div><h3>Transfer successful</h3><div class="big mono">{{inr(r.amount)}}</div><p class="sm muted" style="margin-top:6px">Sent instantly. The amount was taken from your earned income and the recipient has received it.</p></div>
+      <dl class="dl mt mb"><dt>To</dt><dd>{{r.recipientName}} ({{r.toUserId}})</dd><dt>From</dt><dd>Earned income</dd><dt>Status</dt><dd>Completed</dd><dt>Reference</dt><dd class="mono">{{r.reference}}</dd><dt>Date</dt><dd>{{r.createdAt | date:'medium'}}</dd>@if (r.note) { <dt>Note</dt><dd>{{r.note}}</dd> }</dl>
       <button type="button" class="btn btn-ghost btn-block" (click)="mode.set('')">Done</button>
     } @else {
       <form [formGroup]="tf" (ngSubmit)="lookup()" novalidate>
@@ -140,16 +140,16 @@ import { COMMON, showErr } from '../../shared/common';
           <span class="err-t">{{vErr() ? (tf.value.by === 'mobile' ? 'Enter a valid 10-digit mobile number' : 'User ID looks like KL20260000') : lookupErr()}}</span>
           @if (looking()) { <span class="hint">Searching…</span> }
           @if (found(); as f) { <div class="found"><lucide-icon name="check" [size]="16"/> <div><b>{{f.name}}</b><div class="sm muted">{{f.userId}} · {{f.mobile}}</div></div></div> }</div>
-        <div class="note mb">Only <b>earned income</b> can be transferred (available: <b>{{inr(d().wallet.earned)}}</b>). Principal cannot be transferred. Every transfer is sent to the admin for approval before the recipient receives it.</div>
+        <div class="note mb">Only <b>earned income</b> can be transferred (available: <b>{{inr(d().wallet.earned)}}</b>). Principal cannot be transferred. The recipient receives it immediately.</div>
         <div class="field" [class.err]="er(tf, 'amount') || aErr()"><label for="t-a">Amount (₹)</label><input id="t-a" type="number" inputmode="decimal" formControlName="amount" (input)="rcpt.set(null)"><span class="err-t">{{aErr()}}</span></div>
         <div class="field"><label for="t-n">Description</label><input id="t-n" formControlName="note"></div>
         @if (!rcpt()) { <button class="btn btn-primary btn-block" [disabled]="busy()">{{busy() ? 'Checking…' : 'Review transfer'}}</button> }
       </form>
       @if (rcpt(); as r) {
         <div class="sum"><div class="row between"><span>Recipient</span><b>{{r.name}}</b></div><div class="row between"><span>User ID</span><b class="mono">{{r.userId}}</b></div>@if (r.mobile) { <div class="row between"><span>Mobile</span><b class="mono">{{r.mobile}}</b></div> }
-          <div class="row between"><span>From</span><b>Earned income</b></div><div class="row between"><span>Approval</span><b>Admin approval required</b></div>
+          <div class="row between"><span>From</span><b>Earned income</b></div><div class="row between"><span>Delivery</span><b>Instant</b></div>
           <div class="row between tot"><span>Amount</span><b class="mono">{{inr(tp(tf.value.amount))}}</b></div></div>
-        <div class="row mt"><button type="button" class="btn btn-ghost grow" (click)="rcpt.set(null)">Edit</button><button type="button" class="btn btn-gold grow" [disabled]="busy()" (click)="transfer()">{{busy() ? 'Sending…' : 'Send for approval'}}</button></div> } }
+        <div class="row mt"><button type="button" class="btn btn-ghost grow" (click)="rcpt.set(null)">Edit</button><button type="button" class="btn btn-gold grow" [disabled]="busy()" (click)="transfer()">{{busy() ? 'Sending…' : 'Send now'}}</button></div> } }
   </app-modal>`,
   styles: [`
   .warn{color:var(--gold-2)!important;font-weight:600}.refinc{display:grid;gap:4px;border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:12px 16px;margin-bottom:14px;color:#EDE9DD}.refinc .lb,.refinc .muted{color:#9A9482}.refinc .rv{display:flex;gap:8px;align-items:baseline}.refinc .rv b{font:800 1.5rem var(--display);color:var(--gold-2)}.refinc .rv span{color:#9A9482;font-size:.85rem}
