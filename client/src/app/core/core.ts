@@ -47,11 +47,45 @@ export const userGuard: CanActivateFn = (_route, state) => { const a = inject(Au
 export const adminGuard: CanActivateFn = () => { const a = inject(Auth); const r = inject(Router); return a.me()?.role === 'admin' ? true : r.parseUrl('/admin/login'); };
 
 export interface Toast { id: number; kind: 'ok' | 'err'; text: string; }
+/** Sound + browser pop-up for new notifications. Works while the site is open in a tab (it is fed by the bell's 20-second check). */
+@Injectable({ providedIn: 'root' })
+export class NotifySound {
+  muted = signal(NotifySound.read());
+  private prev = new Map<string, number>(); private ctx: AudioContext | null = null;
+  private static read() { try { return localStorage.getItem('kl_sound') === 'off'; } catch { return false; } }
+  constructor() {
+    // Browsers only allow sound after the person has clicked or tapped the page once.
+    const unlock = () => { try { this.ctx ||= new (window.AudioContext || (window as any).webkitAudioContext)(); if (this.ctx.state === 'suspended') void this.ctx.resume(); } catch { /* no audio */ } };
+    ['pointerdown', 'keydown', 'touchstart'].forEach((e) => window.addEventListener(e, unlock, { passive: true }));
+  }
+  toggle() { const m = !this.muted(); this.muted.set(m); try { localStorage.setItem('kl_sound', m ? 'off' : 'on'); } catch { /* ignore */ } if (!m) { this.beep(); this.askPermission(); } }
+  askPermission() { try { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); } catch { /* ignore */ } }
+  beep() {
+    if (this.muted() || !this.ctx || this.ctx.state !== 'running') return;
+    const c = this.ctx, t = c.currentTime;
+    [[880, 0], [1175, 0.16]].forEach(([f, d]) => { const o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(c.destination);
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.25, t + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.3); o.start(t + d); o.stop(t + d + 0.32); });
+  }
+  /** Call with each unread count. The first call only remembers it; a higher count later = a new notification. */
+  onCount(scope: string, count: number, latest?: { title?: string; body?: string; link?: string } | null) {
+    const before = this.prev.get(scope); this.prev.set(scope, count);
+    if (before === undefined || count <= before) return;
+    this.beep();
+    try {
+      if ('Notification' in window && Notification.permission === 'granted' && document.hidden && !this.muted()) {
+        const n = new Notification(latest?.title || 'New notification', { body: latest?.body || '', icon: '/assets/brand/icon-192.png', tag: 'kl-' + scope });
+        n.onclick = () => { window.focus(); if (latest?.link) location.assign(latest.link); n.close(); };
+      }
+    } catch { /* some browsers only allow pop-ups from a service worker */ }
+  }
+  reset() { this.prev.clear(); }
+}
+
 /** Unread admin notifications: the bell in the admin header shows this number. */
 @Injectable({ providedIn: 'root' })
 export class AdminAlerts {
-  private api = inject(Api); unread = signal(0);
-  refresh() { this.api.get<{ count: number }>('/admin/notifications/unread').subscribe({ next: (r) => this.unread.set(r.count || 0), error: () => {} }); }
+  private api = inject(Api); private snd = inject(NotifySound); unread = signal(0);
+  refresh() { this.api.get<{ count: number; latest?: any }>('/admin/notifications/unread').subscribe({ next: (r) => { this.unread.set(r.count || 0); this.snd.onCount('admin', r.count || 0, r.latest ? { ...r.latest, link: r.latest.link } : null); }, error: () => {} }); }
 }
 
 @Injectable({ providedIn: 'root' })

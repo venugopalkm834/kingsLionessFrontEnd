@@ -1,8 +1,8 @@
-import { Component, inject, signal, HostListener, OnInit, effect } from '@angular/core';
+import { Component, inject, signal, HostListener, OnInit, OnDestroy, effect } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
 import { filter } from 'rxjs';
-import { Api, Auth, Site, fileUrl } from '../../core/core';
+import { Api, Auth, Site, NotifySound, fileUrl } from '../../core/core';
 
 @Component({ selector: 'app-user-shell', standalone: true, imports: [RouterOutlet, RouterLink, RouterLinkActive, LucideAngularModule], template: `
   <header class="nav" [class.solid]="scrolled()"><div class="container bar">
@@ -15,7 +15,7 @@ import { Api, Auth, Site, fileUrl } from '../../core/core';
     <div class="tools">
       <a class="contact" [href]="site.waLink()" target="_blank" rel="noopener" aria-label="Contact us on WhatsApp" title="Contact us on WhatsApp"><lucide-icon name="phone" [size]="18"/><span>Contact us</span></a>
       @if (auth.me()?.role === 'user') {
-        <a routerLink="/notifications" class="icb" aria-label="Notifications"><lucide-icon name="bell" [size]="18"/>@if (unread() > 0) {<i class="dot">{{unread() > 9 ? '9+' : unread()}}</i>}</a>
+        <button type="button" class="icb" (click)="snd.toggle()" [attr.aria-label]="snd.muted() ? 'Turn notification sound on' : 'Turn notification sound off'" [title]="snd.muted() ? 'Sound off' : 'Sound on'"><lucide-icon [name]="snd.muted() ? 'volume-x' : 'volume-2'" [size]="18"/></button><a routerLink="/notifications" class="icb" aria-label="Notifications"><lucide-icon name="bell" [size]="18"/>@if (unread() > 0) {<i class="dot">{{unread() > 9 ? '9+' : unread()}}</i>}</a>
         <div class="menu"><button type="button" class="av" (click)="menu.set(!menu())" aria-label="Account menu" aria-haspopup="true" [attr.aria-expanded]="menu()">@if (auth.me()?.avatar) { <img [src]="fileUrl(auth.me()?.avatar)" alt=""> } @else { <span>{{initial()}}</span> }</button>
           @if (menu()) { <div class="dd" (click)="menu.set(false)"><div class="who"><b>{{auth.me()?.name}}</b><span>{{auth.me()?.userId}}</span></div>
             <a routerLink="/profile">Profile</a><a routerLink="/banks">Bank accounts</a><a routerLink="/notifications">Notifications</a><button type="button" (click)="auth.logout()">Logout</button></div> }</div>
@@ -72,7 +72,7 @@ import { Api, Auth, Site, fileUrl } from '../../core/core';
   .drawer-nav nav .cta{background:var(--gold);color:#1A1405;text-align:center;margin-top:6px}.drawer-nav hr{border:0;border-top:1px solid rgba(255,255,255,.1);margin:8px 0}
   .wa-big{margin-top:auto;display:flex;gap:10px;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--gold-2),var(--gold));color:#1A1405;padding:14px;border-radius:14px;font-weight:700}
   .bottom{display:none}
-  @media(max-width:1020px){.links{display:none}.tools{margin-left:auto}.burger{display:grid;margin-left:80px}}
+  @media(max-width:1020px){.links{display:none}.tools{margin-left:auto}.burger{display:grid}}
   @media(max-width:900px){.fgrid{grid-template-columns:1fr 1fr}}
   @media(max-width:700px){
     .bar{min-height:60px;gap:10px}.mk{height:38px}.wm{height:26px}.contact span{display:none}.contact{width:40px;height:40px;padding:0;justify-content:center;border-radius:12px}.hide-s{display:none}
@@ -81,13 +81,15 @@ import { Api, Auth, Site, fileUrl } from '../../core/core';
     .bottom a{display:grid;justify-items:center;gap:2px;font-size:.68rem;font-weight:700;color:#B9B3A0;padding:6px 0;border-radius:10px}.bottom a.on{color:var(--gold-2)}
     .bottom .mid span{width:46px;height:46px;border-radius:50%;background:var(--gold);color:#1A1405;display:grid;place-items:center;margin-top:-22px;border:4px solid var(--ink);box-shadow:0 6px 16px -4px rgba(212,165,58,.6)}.bottom .mid{color:var(--gold-2)}}
   @media(max-width:360px){.wm{display:none}}`] })
-export class UserShell implements OnInit {
+export class UserShell implements OnInit, OnDestroy {
   auth = inject(Auth); site = inject(Site); private api = inject(Api); private router = inject(Router); fileUrl = fileUrl;
+  snd = inject(NotifySound); private timer: any; ngOnDestroy() { clearInterval(this.timer); }
   scrolled = signal(false); menu = signal(false); drawer = signal(false); unread = signal(0); year = new Date().getFullYear();
-  constructor() { effect(() => { if (this.auth.me()?.role === 'user') this.loadUnread(); else this.unread.set(0); }, { allowSignalWrites: true }); }
-  ngOnInit() { this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => { this.menu.set(false); this.drawer.set(false); if (this.auth.me()?.role === 'user') this.loadUnread(); }); }
+  constructor() { effect(() => { if (this.auth.me()?.role === 'user') this.loadUnread(); else { this.unread.set(0); this.snd.reset(); } }, { allowSignalWrites: true }); }
+  // checks every 20 seconds, so a new notification is noticed without clicking anything
+  ngOnInit() { this.timer = setInterval(() => { if (this.auth.me()?.role === 'user') this.loadUnread(); }, 20000); this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => { this.menu.set(false); this.drawer.set(false); if (this.auth.me()?.role === 'user') this.loadUnread(); }); }
   initial() { return (this.auth.me()?.name || '?').charAt(0).toUpperCase(); }
-  loadUnread() { this.api.get<{ count: number }>('/notifications/unread').subscribe({ next: (r) => this.unread.set(r.count), error: () => {} }); }
+  loadUnread() { this.api.get<{ count: number; latest?: any }>('/notifications/unread').subscribe({ next: (r) => { this.unread.set(r.count); this.snd.onCount('user', r.count, r.latest); }, error: () => {} }); }
   @HostListener('window:scroll') onScroll() { this.scrolled.set(window.scrollY > 8); }
   @HostListener('document:click', ['$event']) outside(e: Event) { if (this.menu() && !(e.target as HTMLElement).closest('.menu')) this.menu.set(false); }
 }

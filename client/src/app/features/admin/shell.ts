@@ -2,13 +2,12 @@ import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { Router, NavigationEnd, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { LucideAngularModule } from 'lucide-angular';
-import { Auth, AdminAlerts } from '../../core/core';
+import { Auth, AdminAlerts, NotifySound } from '../../core/core';
 
 const NAV = [['dashboard', 'Dashboard', 'layout-dashboard'], ['bookings', 'Bookings', 'calendar-check'], ['users', 'Users', 'users'], ['services', 'Services', 'wrench'], ['wallets', 'Wallet Management', 'wallet'],
   ['deposits', 'Deposit Requests', 'arrow-down-left'], ['withdrawals', 'Withdrawal Requests', 'arrow-up-right'], ['transfers', 'Fund Transfers', 'repeat'], ['returns', 'Earnings', 'percent'],
   ['payment-accounts', 'Payment Details', 'smartphone'], ['banners', 'Banners', 'image'], ['banks', 'User Bank Accounts', 'landmark'], ['commissions', 'Referral Management', 'gift'], ['transactions', 'Transactions', 'receipt'], ['audit-logs', 'Audit Log', 'shield-check'], ['reports', 'Reports', 'file-text'], ['notifications', 'Notifications', 'bell'], ['settings', 'Settings', 'settings']];
 
-  
 @Component({ selector: 'app-admin-shell', standalone: true, imports: [RouterOutlet, RouterLink, RouterLinkActive, LucideAngularModule], template: `
   <div class="app" [class.mini]="mini()">
     @if (open()) { <div class="scrim" (click)="open.set(false)"></div> }
@@ -16,7 +15,7 @@ const NAV = [['dashboard', 'Dashboard', 'layout-dashboard'], ['bookings', 'Booki
       <nav>@for (n of nav; track n[0]) { <a [routerLink]="'/admin/'+n[0]" routerLinkActive="on" (click)="open.set(false)" [title]="n[1]"><lucide-icon [name]="n[2]" [size]="18"/><span>{{n[1]}}</span>@if (n[0]==='notifications' && alerts.unread() > 0) { <i class="cnt">{{alerts.unread() > 99 ? '99+' : alerts.unread()}}</i> }</a> }</nav>
       <button type="button" class="out" (click)="auth.logout(true)"><lucide-icon name="log-out" [size]="18"/><span>Logout</span></button></aside>
     <div class="main"><header><button type="button" class="btn btn-ghost btn-sm" (click)="toggle()" aria-label="Menu"><lucide-icon name="menu" [size]="18"/></button><div class="grow"></div>
-      <a routerLink="/admin/notifications" class="btn btn-ghost btn-sm" aria-label="Notifications" style="position:relative"><lucide-icon name="bell" [size]="16"/>@if (alerts.unread() > 0) { <i class="dot">{{alerts.unread() > 99 ? '99+' : alerts.unread()}}</i> }</a><div class="who"><span class="av">{{auth.me()?.name?.[0]}}</span><span class="sm strong hide-s">{{auth.me()?.name}}</span></div></header>
+      <button type="button" class="btn btn-ghost btn-sm" (click)="snd.toggle()" [attr.aria-label]="snd.muted() ? 'Turn notification sound on' : 'Turn notification sound off'" [title]="snd.muted() ? 'Sound off' : 'Sound on'"><lucide-icon [name]="snd.muted() ? 'volume-x' : 'volume-2'" [size]="16"/></button><a routerLink="/admin/notifications" class="btn btn-ghost btn-sm" aria-label="Notifications" style="position:relative" (click)="snd.askPermission()"><lucide-icon name="bell" [size]="16"/>@if (alerts.unread() > 0) { <i class="dot">{{alerts.unread() > 99 ? '99+' : alerts.unread()}}</i> }</a><div class="who"><span class="av">{{auth.me()?.name?.[0]}}</span><span class="sm strong hide-s">{{auth.me()?.name}}</span></div></header>
       <div class="content"><router-outlet/></div></div></div>`,
   styles: [`.dot{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger,#D64545);color:#fff;font:700 .68rem/18px var(--font);font-style:normal;text-align:center;box-shadow:0 0 0 2px #fff}.cnt{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--danger,#D64545);color:#fff;font:700 .7rem/20px var(--font);font-style:normal;text-align:center}.mini .cnt{display:none}.app{display:grid;grid-template-columns:262px 1fr;min-height:100dvh;transition:grid-template-columns .25s var(--ease)}.app.mini{grid-template-columns:76px 1fr}
   aside{background:var(--ink);color:#ABA593;display:flex;flex-direction:column;padding:16px 12px;position:sticky;top:0;height:100dvh;overflow:auto;z-index:90}
@@ -28,12 +27,12 @@ const NAV = [['dashboard', 'Dashboard', 'layout-dashboard'], ['bookings', 'Booki
   @media(max-width:900px){.app,.app.mini{grid-template-columns:1fr}aside{position:fixed;left:0;top:0;width:272px;transform:translateX(-100%);transition:transform .26s var(--ease)}aside.open{transform:none}
     .mini .bt,.mini nav span,.mini .out span{display:inline}.scrim{display:block;position:fixed;inset:0;background:rgba(20,20,24,.6);z-index:80}.content{padding:16px}header{padding:10px 16px}.hide-s{display:none}}`] })
 export class AdminShell implements OnInit, OnDestroy {
-  auth = inject(Auth); alerts = inject(AdminAlerts); router = inject(Router); nav = NAV; mini = signal(false); open = signal(false);
+  auth = inject(Auth); alerts = inject(AdminAlerts); snd = inject(NotifySound); router = inject(Router); nav = NAV; mini = signal(false); open = signal(false);
   private subs = new Subscription(); private timer: any;
   ngOnInit() {
     this.alerts.refresh();
     this.subs.add(this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => this.alerts.refresh()));
-    this.timer = setInterval(() => this.alerts.refresh(), 30000); // new bookings / deposits show up without a page reload
+    this.timer = setInterval(() => this.alerts.refresh(), 20000); // new bookings / deposits show up without a page reload
   }
   ngOnDestroy() { this.subs.unsubscribe(); clearInterval(this.timer); }
   toggle() { if (window.innerWidth <= 900) this.open.update((v) => !v); else this.mini.update((v) => !v); }
