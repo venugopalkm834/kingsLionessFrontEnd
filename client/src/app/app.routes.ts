@@ -17,6 +17,7 @@ export const routes: Routes = [
     { path: 'reports', loadComponent: () => b().then((m) => m.AdminReportsPage) },
     { path: 'payment-accounts', loadComponent: () => c().then((m) => m.AdminPaymentAccountsPage) },
     { path: 'banners', loadComponent: () => c().then((m) => m.AdminBannersPage) },
+    { path: 'sound', loadComponent: () => c().then((m) => m.AdminSoundPage) },
     { path: ':kind', loadComponent: () => b().then((m) => m.AdminListPage) },
   ] },
   { path: '', loadComponent: () => import('./features/user/shell').then((m) => m.UserShell), children: [

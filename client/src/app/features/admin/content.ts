@@ -1,5 +1,5 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
-import { Api, ToastService, fileUrl } from '../../core/core';
+import { Api, ToastService, NotifySound, fileUrl } from '../../core/core';
 import { Confirm } from '../../shared/ui';
 import { COMMON } from '../../shared/common';
 
@@ -130,4 +130,38 @@ export class AdminBannersPage implements OnInit {
     if (!(await this.confirm.ask('Delete this banner?', 'It will disappear from the landing page.', true))) return;
     this.api.del('/admin/banners/' + b._id).subscribe({ next: () => { this.toast.ok('Deleted'); this.load(); }, error: (e) => this.toast.err(e) });
   }
+}
+
+
+/* ============ NOTIFICATION SOUND (played to every user and admin when a notification arrives) ============ */
+@Component({ standalone: true, imports: COMMON, template: `
+  <div class="page-head"><div><h2>Notification sound</h2><p class="muted">The sound users and admins hear when a new notification arrives. Pick a built-in sound or upload your own.</p></div></div>
+  @if (loading()) { <app-skeleton [n]="1" [h]="260"/> } @else {
+  <div class="card">
+    <h3 class="mb">Choose a sound</h3>
+    @for (o of presets; track o[0]) { <div class="row between li"><label class="row" style="gap:10px;cursor:pointer"><input type="radio" name="snd" [checked]="cur().preset === o[0]" (change)="choose(o[0])"><span><b>{{o[1]}}</b><span class="muted sm"> · {{o[2]}}</span></span></label>
+      <button type="button" class="btn btn-ghost btn-sm" (click)="preview(o[0])"><lucide-icon name="play" [size]="14"/> Play</button></div> }
+    <div class="row between li"><label class="row" style="gap:10px;cursor:pointer"><input type="radio" name="snd" [checked]="cur().preset === 'custom'" [disabled]="!cur().custom" (change)="choose('custom')"><span><b>Your own sound</b><span class="muted sm"> · {{cur().custom ? (cur().custom.name + ' (' + kb(cur().custom.size) + ' KB)') : 'no file uploaded yet'}}</span></span></label>
+      <div class="row" style="gap:6px">@if (cur().custom) { <button type="button" class="btn btn-ghost btn-sm" (click)="preview('custom')"><lucide-icon name="play" [size]="14"/> Play</button><button type="button" class="btn btn-ghost btn-sm" (click)="remove()"><lucide-icon name="trash-2" [size]="14"/> Remove</button> }</div></div>
+  </div>
+  <div class="card mt">
+    <h3 class="mb">Upload your own</h3>
+    <p class="muted sm mb">MP3, WAV, OGG or M4A, up to 600 KB. A short sound of 1–3 seconds works best. It is stored in the database, so it is kept when the site is redeployed.</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a" (change)="pick($event)"><button type="button" class="btn btn-gold" [disabled]="!file || busy()" (click)="upload()">{{busy() ? 'Uploading…' : 'Upload and use'}}</button></div>
+  </div>
+  <p class="muted sm mt">Sound plays only while the site is open in a browser tab, and only after the person has clicked or tapped the page once. People can mute it with the speaker button next to the bell. Changes reach open tabs the next time they reload.</p> }`,
+  styles: [`.li{padding:12px 0;border-bottom:1px solid var(--border);gap:12px}.li:last-child{border:0}.mt{margin-top:16px}`] })
+export class AdminSoundPage implements OnInit {
+  api = inject(Api); toast = inject(ToastService); snd = inject(NotifySound);
+  loading = signal(true); busy = signal(false); cur = signal<any>({ preset: 'ding', custom: null, v: 0 }); file: File | null = null;
+  presets = [['ding', 'Ding-ding', 'two soft rising notes'], ['beep', 'Single beep', 'one short note'], ['chime', 'Chime', 'three notes, a longer ring'], ['coin', 'Coin', 'bright, quick, suits money alerts']];
+  kb(n: number) { return Math.max(1, Math.round((n || 0) / 1024)); }
+  ngOnInit() { this.api.get<any>('/admin/sound').subscribe({ next: (r) => { this.cur.set(r); this.loading.set(false); }, error: (e) => { this.loading.set(false); this.toast.err(e); } }); }
+  preview(p: string) { this.snd.play(p, this.cur().v); }
+  private applied(r: any) { this.cur.set(r); this.snd.cfg.set({ preset: r.preset, v: r.v }); }
+  choose(p: string) { this.api.put<any>('/admin/sound', { preset: p }).subscribe({ next: (r) => { this.applied(r); this.toast.ok('Notification sound saved'); this.snd.play(r.preset, r.v); }, error: (e) => this.toast.err(e) }); }
+  pick(e: Event) { const f = (e.target as HTMLInputElement).files?.[0] || null; if (f && f.size > 600 * 1024) { this.file = null; (e.target as HTMLInputElement).value = ''; return this.toast.err('That file is over 600 KB. Choose a shorter sound.'); } this.file = f; }
+  upload() { if (!this.file) return; const fd = new FormData(); fd.append('file', this.file); this.busy.set(true);
+    this.api.post<any>('/admin/sound/upload', fd).subscribe({ next: (r) => { this.busy.set(false); this.file = null; this.applied(r); this.toast.ok('Your sound is now the notification sound'); this.snd.play('custom', r.v); }, error: (e) => { this.busy.set(false); this.toast.err(e); } }); }
+  remove() { this.api.del<any>('/admin/sound/custom').subscribe({ next: (r) => { this.applied(r); this.toast.ok('Custom sound removed'); }, error: (e) => this.toast.err(e) }); }
 }

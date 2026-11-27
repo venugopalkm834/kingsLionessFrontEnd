@@ -6,7 +6,7 @@ import { Auth, AdminAlerts, NotifySound } from '../../core/core';
 
 const NAV = [['dashboard', 'Dashboard', 'layout-dashboard'], ['bookings', 'Bookings', 'calendar-check'], ['users', 'Users', 'users'], ['services', 'Services', 'wrench'], ['wallets', 'Wallet Management', 'wallet'],
   ['deposits', 'Deposit Requests', 'arrow-down-left'], ['withdrawals', 'Withdrawal Requests', 'arrow-up-right'], ['transfers', 'Fund Transfers', 'repeat'], ['returns', 'Earnings', 'percent'],
-  ['payment-accounts', 'Payment Details', 'smartphone'], ['banners', 'Banners', 'image'], ['banks', 'User Bank Accounts', 'landmark'], ['commissions', 'Referral Management', 'gift'], ['transactions', 'Transactions', 'receipt'], ['audit-logs', 'Audit Log', 'shield-check'], ['reports', 'Reports', 'file-text'], ['notifications', 'Notifications', 'bell'], ['settings', 'Settings', 'settings']];
+  ['payment-accounts', 'Payment Details', 'smartphone'], ['banners', 'Banners', 'image'], ['sound', 'Notification Sound', 'volume-2'], ['banks', 'User Bank Accounts', 'landmark'], ['commissions', 'Referral Management', 'gift'], ['transactions', 'Transactions', 'receipt'], ['audit-logs', 'Audit Log', 'shield-check'], ['reports', 'Reports', 'file-text'], ['notifications', 'Notifications', 'bell'], ['settings', 'Settings', 'settings']];
 
 @Component({ selector: 'app-admin-shell', standalone: true, imports: [RouterOutlet, RouterLink, RouterLinkActive, LucideAngularModule], template: `
   <div class="app" [class.mini]="mini()">
